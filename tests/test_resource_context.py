@@ -23,7 +23,7 @@ def test_pvc_not_mounted():
 
     pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "my-pvc"}})
 
-    context = get_resource_context(pvc, None, {})
+    context = get_resource_context(pvc)
     assert context["pvc_is_not_mounted"]
 
 
@@ -54,7 +54,7 @@ def test_pvc_mounted():
 
     pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "my-pvc"}})
 
-    context = get_resource_context(pvc, None, {})
+    context = get_resource_context(pvc)
     assert not context["pvc_is_not_mounted"]
 
 
@@ -83,7 +83,7 @@ def test_pvc_is_referenced():
 
     pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "data-my-sts-0"}})
 
-    context = get_resource_context(pvc, None, {})
+    context = get_resource_context(pvc)
     assert not context["pvc_is_not_referenced"]
 
 
