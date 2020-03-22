@@ -1,7 +1,9 @@
 import logging
 import re
 from typing import Any
+from typing import Callable
 from typing import Dict
+from typing import Optional
 
 from pykube.objects import APIObject
 from pykube.objects import NamespacedAPIObject
@@ -11,7 +13,9 @@ from pykube.objects import StatefulSet
 logger = logging.getLogger(__name__)
 
 
-def get_persistent_volume_claim_context(pvc: NamespacedAPIObject):
+def get_persistent_volume_claim_context(
+    pvc: NamespacedAPIObject, cache: Dict[str, Any]
+):
     """Get context for PersistentVolumeClaim: whether it's mounted by a Pod and whether it's referenced by a StatefulSet."""
     pvc_is_mounted = False
     pvc_is_referenced = False
@@ -47,12 +51,24 @@ def get_persistent_volume_claim_context(pvc: NamespacedAPIObject):
     }
 
 
-def get_resource_context(resource: APIObject):
+def get_resource_context(
+    resource: APIObject,
+    hook: Optional[Callable[[APIObject, dict], Dict[str, Any]]] = None,
+    cache: Optional[Dict[str, Any]] = None,
+):
     """Get additional context information for a single resource, e.g. whether a PVC is mounted/used or not."""
 
     context: Dict[str, Any] = {}
 
     if resource.kind == "PersistentVolumeClaim":
-        context.update(get_persistent_volume_claim_context(resource))
+        context.update(get_persistent_volume_claim_context(resource, cache or {}))
+
+    if hook:
+        try:
+            context.update(hook(resource, cache or {}))
+        except Exception as e:
+            logger.exception(
+                f"Failed populating _context from resource context hook: {e}"
+            )
 
     return context
