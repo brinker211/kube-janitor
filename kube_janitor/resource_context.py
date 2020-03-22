@@ -60,12 +60,15 @@ def get_resource_context(
 
     context: Dict[str, Any] = {}
 
+    if cache is None:
+        cache = {}
+
     if resource.kind == "PersistentVolumeClaim":
-        context.update(get_persistent_volume_claim_context(resource, cache or {}))
+        context.update(get_persistent_volume_claim_context(resource, cache))
 
     if hook:
         try:
-            context.update(hook(resource, cache or {}))
+            context.update(hook(resource, cache))
         except Exception as e:
             logger.exception(
                 f"Failed populating _context from resource context hook: {e}"
