@@ -5,12 +5,26 @@ from typing import Callable
 from typing import Dict
 from typing import Optional
 
+from pykube import HTTPClient
 from pykube.objects import APIObject
 from pykube.objects import NamespacedAPIObject
 from pykube.objects import Pod
 from pykube.objects import StatefulSet
 
 logger = logging.getLogger(__name__)
+
+
+def get_objects_in_namespace(
+    clazz, api: HTTPClient, namespace: str, cache: Dict[str, Any]
+):
+    """Get (cached) objects from the Kubernetes API."""
+    cache_key = f"{namespace}/{clazz.endpoint}"
+    objects = cache.get(cache_key)
+    if objects is None:
+        objects = list(clazz.objects(api, namespace=namespace))
+        cache[cache_key] = objects
+
+    return objects
 
 
 def get_persistent_volume_claim_context(
@@ -21,7 +35,7 @@ def get_persistent_volume_claim_context(
     pvc_is_referenced = False
 
     # find out whether a Pod mounts the PVC
-    for pod in Pod.objects(pvc.api, namespace=pvc.namespace):
+    for pod in get_objects_in_namespace(Pod, pvc.api, pvc.namespace, cache):
         for volume in pod.obj.get("spec", {}).get("volumes", []):
             if "persistentVolumeClaim" in volume:
                 if volume["persistentVolumeClaim"].get("claimName") == pvc.name:
@@ -32,7 +46,7 @@ def get_persistent_volume_claim_context(
                     break
 
     # find out whether the PVC is still referenced somewhere
-    for sts in StatefulSet.objects(pvc.api, namespace=pvc.namespace):
+    for sts in get_objects_in_namespace(StatefulSet, pvc.api, pvc.namespace, cache):
         # see https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
         for claim_template in sts.obj.get("spec", {}).get("volumeClaimTemplates", []):
             claim_prefix = claim_template.get("metadata", {}).get("name")
