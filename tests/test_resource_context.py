@@ -7,6 +7,26 @@ from pykube.objects import PersistentVolumeClaim
 import kube_janitor.example_hooks
 from kube_janitor.resource_context import get_resource_context
 
+JOB_WITH_VOLUME = """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: my-image
+        volumeMounts:
+          - mountPath: "/data"
+            name: "job-data"
+      volumes:
+        - name: "foobar-data"
+          persistentVolumeClaim:
+            claimName: "job-data"
+"""
+
 CRONJOB_WITH_VOLUME = """
 apiVersion: batch/v1beta1
 kind: CronJob
@@ -132,6 +152,26 @@ def test_pvc_is_referenced_by_cronjob():
     api_mock.get = get
 
     pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "foobar-data"}})
+
+    context = get_resource_context(pvc)
+    assert not context["pvc_is_not_referenced"]
+
+
+def test_pvc_is_referenced_by_job():
+    api_mock = MagicMock(name="APIMock")
+
+    def get(**kwargs):
+        if kwargs.get("url") == "jobs":
+            data = {"items": [yaml.safe_load(JOB_WITH_VOLUME)]}
+        else:
+            data = {}
+        response = MagicMock()
+        response.json.return_value = data
+        return response
+
+    api_mock.get = get
+
+    pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "job-data"}})
 
     context = get_resource_context(pvc)
     assert not context["pvc_is_not_referenced"]
