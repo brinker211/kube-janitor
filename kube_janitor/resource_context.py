@@ -17,9 +17,11 @@ from pykube.objects import StatefulSet
 logger = logging.getLogger(__name__)
 
 PVC_REFERENCES = {
-    Pod: jmespath.compile("spec.volumes"),
-    Job: jmespath.compile("spec.template.spec.volumes"),
-    CronJob: jmespath.compile("spec.jobTemplate.spec.template.spec.volumes"),
+    Pod: jmespath.compile("spec.volumes[].persistentVolumeClaim"),
+    Job: jmespath.compile("spec.template.spec.volumes[].persistentVolumeClaim"),
+    CronJob: jmespath.compile(
+        "spec.jobTemplate.spec.template.spec.volumes[].persistentVolumeClaim"
+    ),
 }
 
 
@@ -36,31 +38,39 @@ def get_objects_in_namespace(
     return objects
 
 
+def is_pvc_referenced_by_object(
+    pvc: NamespacedAPIObject, obj: NamespacedAPIObject, claim_path
+) -> bool:
+    """Check whether the given PVC is referenced by `obj` using the passed JMESpath to find volume claims."""
+    for claim in claim_path.search(obj.obj) or []:
+        if claim.get("claimName") == pvc.name:
+            return True
+    return False
+
+
 def get_persistent_volume_claim_context(
     pvc: NamespacedAPIObject, cache: Dict[str, Any]
-):
+) -> Dict[str, Any]:
     """Get context for PersistentVolumeClaim: whether it's mounted by a Pod and whether it's referenced by a StatefulSet."""
     pvc_is_mounted = False
     pvc_is_referenced = False
 
-    for clazz, volumes_path in PVC_REFERENCES.items():
+    for clazz, claim_path in PVC_REFERENCES.items():
         if pvc_is_referenced:
             break
         # find out whether the PVC is still mounted by a Pod or referenced by some object
         for obj in get_objects_in_namespace(clazz, pvc.api, pvc.namespace, cache):
-            for volume in volumes_path.search(obj.obj) or []:
-                if "persistentVolumeClaim" in volume:
-                    if volume["persistentVolumeClaim"].get("claimName") == pvc.name:
-                        if clazz is Pod:
-                            verb = "mounted"
-                            pvc_is_mounted = True
-                        else:
-                            verb = "referenced"
-                        logger.debug(
-                            f"{pvc.kind} {pvc.namespace}/{pvc.name} is {verb} by {obj.kind} {obj.name}"
-                        )
-                        pvc_is_referenced = True
-                        break
+            if is_pvc_referenced_by_object(pvc, obj, claim_path):
+                if clazz is Pod:
+                    verb = "mounted"
+                    pvc_is_mounted = True
+                else:
+                    verb = "referenced"
+                logger.debug(
+                    f"{pvc.kind} {pvc.namespace}/{pvc.name} is {verb} by {obj.kind} {obj.name}"
+                )
+                pvc_is_referenced = True
+                break
 
     if not pvc_is_referenced:
         # find out whether the PVC is still referenced by a StatefulSet
