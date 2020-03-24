@@ -1,10 +1,40 @@
 from unittest.mock import MagicMock
 
+import yaml
 from pykube.objects import Namespace
 from pykube.objects import PersistentVolumeClaim
 
 import kube_janitor.example_hooks
 from kube_janitor.resource_context import get_resource_context
+
+CRONJOB_WITH_VOLUME = """
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: "foobar"
+spec:
+  schedule: "0 23 * * *"
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            application: "foobar"
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cont
+              image: "my-docker-image"
+              volumeMounts:
+                - mountPath: "/data"
+                  name: "foobar-data"
+          volumes:
+            - name: "foobar-data"
+              persistentVolumeClaim:
+                claimName: "foobar-data"
+"""
 
 
 def test_pvc_not_mounted():
@@ -58,7 +88,7 @@ def test_pvc_mounted():
     assert not context["pvc_is_not_mounted"]
 
 
-def test_pvc_is_referenced():
+def test_pvc_is_referenced_by_statefulset():
     api_mock = MagicMock(name="APIMock")
 
     def get(**kwargs):
@@ -82,6 +112,26 @@ def test_pvc_is_referenced():
     api_mock.get = get
 
     pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "data-my-sts-0"}})
+
+    context = get_resource_context(pvc)
+    assert not context["pvc_is_not_referenced"]
+
+
+def test_pvc_is_referenced_by_cronjob():
+    api_mock = MagicMock(name="APIMock")
+
+    def get(**kwargs):
+        if kwargs.get("url") == "cronjobs":
+            data = {"items": [yaml.safe_load(CRONJOB_WITH_VOLUME)]}
+        else:
+            data = {}
+        response = MagicMock()
+        response.json.return_value = data
+        return response
+
+    api_mock.get = get
+
+    pvc = PersistentVolumeClaim(api_mock, {"metadata": {"name": "foobar-data"}})
 
     context = get_resource_context(pvc)
     assert not context["pvc_is_not_referenced"]
