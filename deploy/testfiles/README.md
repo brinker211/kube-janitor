@@ -24,7 +24,7 @@ kubectl get pvc
 5. Deploy Kube-janitor
 ```
 kubectl apply -f deploy/common/
-kubectl apply -f deploy/deployments/
+kubectl apply -f deploy/deployment/
 ```
 
 6. Check kube-janitor pod logs to confirm the delete
