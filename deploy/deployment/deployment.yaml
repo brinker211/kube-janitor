@@ -22,13 +22,14 @@ spec:
         # see https://github.com/hjacobs/kube-janitor/releases
         image: hjacobs/kube-janitor:20.3.2
         args:
-          # dry run by default, remove to perform clean up
-          - --dry-run
+          # dry-run disabled by default, remove comment only generate "would have" logs
+          #- --dry-run
           # comment out to have less verbose logging
           - --debug
-          # run every minute
-          - --interval=60
           - --rules-file=/config/rules.yaml
+          - --include-resources=persistentvolumeclaims
+          # Interval set high for testing to avoid looping quickly. Can also use as cron job "once" if we want. 
+          - --interval=1200
         resources:
           limits:
             memory: 100Mi
